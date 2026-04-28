@@ -111,12 +111,13 @@ call npm install --loglevel=error
 if errorlevel 1 ( echo  [ERRO] Falha ao instalar pacotes npm. & goto :error )
 echo  [OK] Electron instalado
 
-REM ── Atalho na Area de Trabalho ──────────────────────────────────────────────
+REM ── Atalho com icone na Area de Trabalho ────────────────────────────────────
 echo.
 echo  [>>] Criando atalho na Area de Trabalho...
 set "SHORTCUT=%USERPROFILE%\Desktop\Media Downloader.lnk"
 set "TARGET=%~dp0iniciar.bat"
-powershell -Command "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut('%SHORTCUT%'); $s.TargetPath='%TARGET%'; $s.WorkingDirectory='%~dp0'; $s.Description='Media Downloader'; $s.Save()"
+set "ICON=%~dp0src\icon.ico"
+powershell -Command "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut('%SHORTCUT%'); $s.TargetPath='%TARGET%'; $s.WorkingDirectory='%~dp0'; $s.IconLocation='%ICON%'; $s.Description='Media Downloader'; $s.Save()"
 echo  [OK] Atalho criado na Area de Trabalho
 
 REM ── Limpeza ─────────────────────────────────────────────────────────────────
