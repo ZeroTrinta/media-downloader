@@ -4,9 +4,9 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo.
-echo  ╔══════════════════════════════════════════╗
-echo  ║       Media Downloader - Instalador      ║
-echo  ╚══════════════════════════════════════════╝
+echo  ============================================
+echo    Media Downloader - Instalador
+echo  ============================================
 echo.
 
 REM ── Verifica permissao de administrador ──────────────────────────────────────
@@ -17,7 +17,6 @@ if errorlevel 1 (
     exit /b
 )
 
-REM ── Pasta temporaria para downloads ──────────────────────────────────────────
 set "TMP_DIR=%~dp0_instalador_tmp"
 if not exist "%TMP_DIR%" mkdir "%TMP_DIR%"
 
@@ -25,6 +24,10 @@ REM ═════════════════════════�
 REM  1. NODE.JS
 REM ═══════════════════════════════════════════════════════
 echo  [1/4] Verificando Node.js...
+
+REM Adiciona caminhos comuns do Node ao PATH desta sessao
+set "PATH=%PATH%;C:\Program Files\nodejs;%APPDATA%\npm"
+
 node --version >nul 2>&1
 if not errorlevel 1 (
     for /f "tokens=*" %%v in ('node --version') do echo  [OK] Node.js %%v ja instalado
@@ -36,10 +39,23 @@ set "NODE_URL=https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi"
 set "NODE_MSI=%TMP_DIR%\node.msi"
 powershell -Command "& { $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%NODE_MSI%' }"
 if not exist "%NODE_MSI%" ( echo  [ERRO] Falha ao baixar Node.js. & goto :error )
+
 echo  [>>] Instalando Node.js...
-msiexec /i "%NODE_MSI%" /qn /norestart
-if errorlevel 1 ( echo  [ERRO] Falha ao instalar Node.js. & goto :error )
+msiexec /i "%NODE_MSI%" /qn /norestart ADDLOCAL=ALL
+REM Aguarda instalacao terminar
+ping -n 5 127.0.0.1 >nul
+
+REM Atualiza PATH com o caminho padrao do Node recem instalado
+set "PATH=%PATH%;C:\Program Files\nodejs;%APPDATA%\npm"
 for /f "tokens=*" %%p in ('powershell -Command "[System.Environment]::GetEnvironmentVariable(\"PATH\",\"Machine\")"') do set "PATH=%%p;%PATH%"
+
+node --version >nul 2>&1
+if errorlevel 1 (
+    echo  [AVISO] Node instalado mas requer reinicio. Continuando com caminho direto...
+    set "NPM_CMD=C:\Program Files\nodejs\npm.cmd"
+) else (
+    set "NPM_CMD=npm"
+)
 echo  [OK] Node.js instalado
 
 REM ═══════════════════════════════════════════════════════
@@ -48,6 +64,14 @@ REM ═════════════════════════�
 :check_python
 echo.
 echo  [2/4] Verificando Python...
+
+REM Adiciona caminhos comuns do Python ao PATH desta sessao
+set "PATH=%PATH%;C:\Python311;C:\Python312;C:\Python313;C:\Python314"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python312"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python313"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python314"
+
 python --version >nul 2>&1
 if not errorlevel 1 (
     for /f "tokens=*" %%v in ('python --version') do echo  [OK] %%v ja instalado
@@ -59,9 +83,13 @@ set "PY_URL=https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe"
 set "PY_EXE=%TMP_DIR%\python.exe"
 powershell -Command "& { $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_EXE%' }"
 if not exist "%PY_EXE%" ( echo  [ERRO] Falha ao baixar Python. & goto :error )
+
 echo  [>>] Instalando Python...
 "%PY_EXE%" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-if errorlevel 1 ( echo  [ERRO] Falha ao instalar Python. & goto :error )
+ping -n 3 127.0.0.1 >nul
+
+REM Atualiza PATH
+set "PATH=%PATH%;C:\Python311;%LOCALAPPDATA%\Programs\Python\Python311"
 for /f "tokens=*" %%p in ('powershell -Command "[System.Environment]::GetEnvironmentVariable(\"PATH\",\"Machine\")"') do set "PATH=%%p;%PATH%"
 echo  [OK] Python instalado
 
@@ -107,8 +135,17 @@ if errorlevel 1 python -m pip install yt-dlp --quiet
 echo  [OK] yt-dlp instalado
 
 echo  [>>] Instalando Electron (pode demorar alguns minutos)...
-call npm install --loglevel=error
-if errorlevel 1 ( echo  [ERRO] Falha ao instalar pacotes npm. & goto :error )
+REM Tenta npm normal, depois caminho direto
+if defined NPM_CMD (
+    call "%NPM_CMD%" install --loglevel=error
+) else (
+    call npm install --loglevel=error
+)
+if errorlevel 1 (
+    REM Ultima tentativa com caminho completo
+    call "C:\Program Files\nodejs\npm.cmd" install --loglevel=error
+    if errorlevel 1 ( echo  [ERRO] Falha ao instalar pacotes npm. & goto :error )
+)
 echo  [OK] Electron instalado
 
 REM ── Atalho com icone na Area de Trabalho ────────────────────────────────────
@@ -124,22 +161,21 @@ REM ── Limpeza ────────────────────�
 rd /s /q "%TMP_DIR%" >nul 2>&1
 
 echo.
-echo  ╔══════════════════════════════════════════╗
-echo  ║    Instalacao concluida com sucesso!     ║
-echo  ║                                          ║
-echo  ║  Use o atalho na Area de Trabalho        ║
-echo  ║  ou clique duas vezes em iniciar.bat     ║
-echo  ╚══════════════════════════════════════════╝
+echo  ============================================
+echo    Instalacao concluida com sucesso!
+echo    Use o atalho na Area de Trabalho
+echo    ou clique duas vezes em iniciar.bat
+echo  ============================================
 echo.
 pause
 exit /b 0
 
 :error
 echo.
-echo  ╔══════════════════════════════════════════╗
-echo  ║         Instalacao com erros!            ║
-echo  ║  Verifique sua conexao e tente de novo.  ║
-echo  ╚══════════════════════════════════════════╝
+echo  ============================================
+echo    Instalacao com erros!
+echo    Verifique sua conexao e tente de novo.
+echo  ============================================
 echo.
 pause
 exit /b 1
