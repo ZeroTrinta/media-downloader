@@ -2,11 +2,11 @@
 """
 Media Downloader — Servidor local
 Suporta: YouTube, Instagram, X (Twitter)
-Uso: python server.py  →  http://localhost:8765
 """
 
 import json
 import os
+import sys
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -18,20 +18,40 @@ DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 PORT = 8765
 
+# Usa o mesmo Python que está rodando este script para chamar yt-dlp
+PYTHON = sys.executable
+
+
+def run_ytdlp(args: list, **kwargs) -> subprocess.CompletedProcess:
+    """Roda yt-dlp via 'python -m yt_dlp' para garantir que usa o Python correto."""
+    return subprocess.run(
+        [PYTHON, "-m", "yt_dlp"] + args,
+        **kwargs
+    )
+
+
+def run_ytdlp_popen(args: list, **kwargs) -> subprocess.Popen:
+    return subprocess.Popen(
+        [PYTHON, "-m", "yt_dlp"] + args,
+        **kwargs
+    )
+
 
 def check_yt_dlp():
     try:
-        r = subprocess.run(["yt-dlp", "--version"], capture_output=True, check=True, text=True)
-        return r.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return None
+        r = run_ytdlp(["--version"], capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return None
 
 
 def check_ffmpeg():
     try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True, timeout=5)
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except Exception:
         return False
 
 
@@ -42,16 +62,15 @@ def run_update():
     update_status.update({"running": True, "log": [], "done": False, "error": None})
     try:
         proc = subprocess.Popen(
-            ["pip", "install", "--upgrade", "yt-dlp"],
+            [PYTHON, "-m", "pip", "install", "--upgrade", "yt-dlp"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
         )
         for line in proc.stdout:
             update_status["log"].append(line.strip())
         proc.wait()
-        if proc.returncode == 0:
-            update_status["done"] = True
-        else:
-            update_status["error"] = "Falha ao atualizar. Veja o log."
+        update_status["done"] = proc.returncode == 0
+        if proc.returncode != 0:
+            update_status["error"] = "Falha ao atualizar."
     except Exception as e:
         update_status["error"] = str(e)
     finally:
@@ -69,16 +88,15 @@ def detect_platform(url: str) -> str:
 
 
 def cookie_flags(browser: str) -> list:
-    """Return yt-dlp cookie flags for a given browser name, or empty list."""
     if not browser or browser == "none":
         return []
     return ["--cookies-from-browser", browser]
 
 
 def get_video_info(url: str, browser: str = "none") -> dict:
-    cmd = ["yt-dlp", "--dump-json", "--no-playlist"] + cookie_flags(browser) + [url]
+    cmd = ["--dump-json", "--no-playlist"] + cookie_flags(browser) + [url]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = run_ytdlp(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             data = json.loads(result.stdout)
             return {
@@ -87,7 +105,6 @@ def get_video_info(url: str, browser: str = "none") -> dict:
                 "uploader": data.get("uploader") or data.get("channel", ""),
                 "thumbnail": data.get("thumbnail", ""),
             }
-        # Return last meaningful error line
         err_lines = [l for l in result.stderr.strip().split("\n") if l.strip()]
         return {"error": err_lines[-1] if err_lines else "Erro desconhecido"}
     except Exception as e:
@@ -98,9 +115,8 @@ active_downloads: dict = {}
 
 
 def build_command(url: str, mode: str, quality: str, output_template: str, platform: str, browser: str) -> list:
-    """Build yt-dlp command tailored per platform, mode and cookies."""
     cookies = cookie_flags(browser)
-    base = ["yt-dlp", "--no-playlist"] + cookies + ["-o", output_template]
+    base = ["--no-playlist"] + cookies + ["-o", output_template]
 
     if platform in ("instagram", "x"):
         if mode == "audio":
@@ -115,20 +131,20 @@ def build_command(url: str, mode: str, quality: str, output_template: str, platf
         "720":  "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
         "480":  "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]",
     }
-    fmt = fmt_map.get(quality, fmt_map["best"])
-    return base + ["-f", fmt, "--merge-output-format", "mp4", url]
+    return base + ["-f", fmt_map.get(quality, fmt_map["best"]), "--merge-output-format", "mp4", url]
 
 
 def download_media(download_id: str, url: str, mode: str, quality: str, browser: str = "none"):
     platform = detect_platform(url)
     output_template = str(DOWNLOAD_DIR / "%(uploader)s - %(title)s.%(ext)s")
-    cmd = build_command(url, mode, quality, output_template, platform, browser)
+    args = build_command(url, mode, quality, output_template, platform, browser)
 
     active_downloads[download_id] = {"status": "downloading", "progress": 0, "log": [], "platform": platform}
 
     try:
-        process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        process = run_ytdlp_popen(
+            args,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1
         )
         for line in process.stdout:
@@ -263,25 +279,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    print("=" * 52)
-    print("  Media Downloader — Servidor Local")
-    print("  YouTube · Instagram · X (Twitter)")
-    print("=" * 52)
-
-    missing = []
-    if not check_yt_dlp():
-        missing.append(("yt-dlp", "pip install yt-dlp"))
-    if not check_ffmpeg():
-        missing.append(("ffmpeg", "brew install ffmpeg  (macOS) / sudo apt install ffmpeg  (Linux)"))
-
-    if missing:
-        print("\n[AVISO] Dependências faltando:")
-        for name, cmd in missing:
-            print(f"  {name}: {cmd}")
-
-    print(f"\nPasta de downloads : {DOWNLOAD_DIR}")
-    print(f"Servidor em        : http://localhost:{PORT}")
-    print("Pressione Ctrl+C para encerrar.\n")
+    print(f"Python: {PYTHON}")
+    print(f"yt-dlp: {check_yt_dlp() or 'NAO ENCONTRADO'}")
+    print(f"ffmpeg: {'ok' if check_ffmpeg() else 'nao encontrado'}")
+    print(f"Downloads: {DOWNLOAD_DIR}")
+    print(f"Servidor: http://localhost:{PORT}\n")
 
     server = HTTPServer(("localhost", PORT), Handler)
     try:

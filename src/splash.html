@@ -13,31 +13,124 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 24px;
+    gap: 20px;
     user-select: none;
+    overflow: hidden;
   }
+
   .logo {
     font-size: 11px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: #c8f542;
+    font-family: 'Courier New', monospace;
   }
-  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; }
-  .spinner {
-    width: 36px; height: 36px;
-    border: 2px solid #2e2e38;
-    border-top-color: #c8f542;
+
+  h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  /* Spinner animado */
+  .spinner-wrap {
+    position: relative;
+    width: 56px;
+    height: 56px;
+  }
+  .ring {
+    position: absolute;
+    inset: 0;
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    border: 2px solid transparent;
+  }
+  .ring-outer {
+    border-top-color: #c8f542;
+    animation: spin 1s linear infinite;
+  }
+  .ring-inner {
+    inset: 8px;
+    border-top-color: #4a5c1a;
+    animation: spin 0.6s linear infinite reverse;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .msg { font-size: 12px; color: #8a8a96; font-family: monospace; letter-spacing: 0.05em; }
+
+  /* Linha de log tipo terminal */
+  .terminal {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #4a4a56;
+    width: 320px;
+    text-align: left;
+    min-height: 80px;
+  }
+  .terminal-line {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.3s, transform 0.3s;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 2px 0;
+  }
+  .terminal-line.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .terminal-line .prefix { color: #c8f542; }
+  .terminal-line .ok { color: #6abf40; }
+  .terminal-line .wait { color: #8a8a96; }
+
+  /* Barra de progresso fina na base */
+  .progress-bar {
+    position: fixed;
+    bottom: 0; left: 0;
+    height: 2px;
+    background: #c8f542;
+    width: 0%;
+    transition: width 0.8s ease;
+    box-shadow: 0 0 8px #c8f542;
+  }
 </style>
 </head>
 <body>
+
   <div class="logo">▶ local downloader</div>
   <h1>Media Downloader</h1>
-  <div class="spinner"></div>
-  <div class="msg">iniciando servidor...</div>
+
+  <div class="spinner-wrap">
+    <div class="ring ring-outer"></div>
+    <div class="ring ring-inner"></div>
+  </div>
+
+  <div class="terminal" id="terminal"></div>
+
+  <div class="progress-bar" id="progress-bar"></div>
+
+<script>
+  const terminal = document.getElementById('terminal');
+  const progressBar = document.getElementById('progress-bar');
+
+  const steps = [
+    { text: 'iniciando processo Python...', delay: 300,  progress: 10 },
+    { text: 'carregando módulos...',        delay: 900,  progress: 30 },
+    { text: 'verificando yt-dlp...',        delay: 1600, progress: 50 },
+    { text: 'abrindo servidor local...',    delay: 2400, progress: 70 },
+    { text: 'aguardando porta 8765...',     delay: 3200, progress: 85 },
+    { text: 'quase lá...',                  delay: 4200, progress: 95 },
+  ];
+
+  steps.forEach(({ text, delay, progress }) => {
+    setTimeout(() => {
+      const line = document.createElement('div');
+      line.className = 'terminal-line';
+      line.innerHTML = `<span class="prefix">$ </span><span class="wait">${text}</span>`;
+      terminal.appendChild(line);
+      // Mantém só as últimas 4 linhas
+      while (terminal.children.length > 4) terminal.removeChild(terminal.firstChild);
+      requestAnimationFrame(() => line.classList.add('show'));
+      progressBar.style.width = progress + '%';
+    }, delay);
+  });
+</script>
 </body>
 </html>

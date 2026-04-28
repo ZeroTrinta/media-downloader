@@ -12,4 +12,12 @@ if not exist "%~dp0node_modules" (
     exit /b 1
 )
 
+REM Garante que yt-dlp esta instalado no Python correto
+echo Verificando yt-dlp...
+python -c "import yt_dlp" >nul 2>&1
+if errorlevel 1 (
+    echo Instalando yt-dlp...
+    python -m pip install yt-dlp --quiet
+)
+
 start "" npx electron .

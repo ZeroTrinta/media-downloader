@@ -11,35 +11,50 @@ let pythonProcess = null;
 
 // ── Find Python ────────────────────────────────────────────────────────────────
 function findPython() {
-  // Lugares comuns onde Python fica no Windows
   const candidates = [
     'python',
     'python3',
     'py',
     path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'python.exe'),
+    path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python312', 'python.exe'),
     path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
     path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python39', 'python.exe'),
     'C:\\Python311\\python.exe',
+    'C:\\Python312\\python.exe',
     'C:\\Python310\\python.exe',
     'C:\\Program Files\\Python311\\python.exe',
-    'C:\\Program Files\\Python310\\python.exe',
+    'C:\\Program Files\\Python312\\python.exe',
   ];
 
   for (const cmd of candidates) {
     try {
       const r = spawnSync(cmd, ['--version'], {
-        encoding: 'utf8',
-        timeout: 3000,
-        windowsHide: true,
-        env: { ...process.env, PATH: process.env.PATH },
+        encoding: 'utf8', timeout: 3000, windowsHide: true,
       });
-      if (r.status === 0 || (r.stdout && r.stdout.includes('Python'))) {
-        console.log('[python] found at:', cmd);
+      if (r.status === 0) {
+        console.log('[python] found at:', cmd, r.stdout.trim());
         return cmd;
       }
     } catch {}
   }
   return null;
+}
+
+// ── Ensure yt-dlp is installed ─────────────────────────────────────────────────
+function ensureYtDlp(python) {
+  console.log('[yt-dlp] checking...');
+  const check = spawnSync(python, ['-c', 'import yt_dlp'], {
+    encoding: 'utf8', timeout: 5000, windowsHide: true,
+  });
+  if (check.status !== 0) {
+    console.log('[yt-dlp] not found, installing...');
+    const install = spawnSync(python, ['-m', 'pip', 'install', 'yt-dlp', '--quiet'], {
+      encoding: 'utf8', timeout: 60000, windowsHide: true,
+    });
+    console.log('[yt-dlp] install result:', install.status);
+  } else {
+    console.log('[yt-dlp] already installed');
+  }
 }
 
 // ── Resolve backend path ───────────────────────────────────────────────────────
@@ -50,50 +65,57 @@ function getBackendPath() {
   return path.join(__dirname, '..', 'backend', 'server.py');
 }
 
+// ── Build PATH with local ffmpeg ───────────────────────────────────────────────
+function buildEnvPath() {
+  const ffmpegDir = path.join(__dirname, '..', 'ffmpeg');
+  return fs.existsSync(ffmpegDir)
+    ? `${ffmpegDir};${process.env.PATH}`
+    : process.env.PATH;
+}
+
 // ── Start Python server ────────────────────────────────────────────────────────
 function startPython() {
   const python = findPython();
   if (!python) {
     dialog.showErrorBox(
       'Python não encontrado',
-      'Instale Python 3.8+ em python.org e marque "Add Python to PATH".\nDepois reinicie o app.'
+      'Instale Python 3.8+ em python.org\ne marque "Add Python to PATH".\nDepois reinicie o app.'
     );
     app.quit();
     return;
   }
 
-  const serverPath = getBackendPath();
-  console.log('[python] starting server at:', serverPath);
+  // Auto-instala yt-dlp se necessário
+  ensureYtDlp(python);
 
-  // Adiciona ffmpeg local ao PATH se existir
-  const ffmpegDir = path.join(__dirname, '..', 'ffmpeg');
-  const envPath = fs.existsSync(ffmpegDir)
-    ? `${ffmpegDir};${process.env.PATH}`
-    : process.env.PATH;
+  const serverPath = getBackendPath();
+  console.log('[python] starting:', serverPath);
 
   pythonProcess = spawn(python, [serverPath], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
-    env: { ...process.env, PATH: envPath },
+    env: { ...process.env, PATH: buildEnvPath() },
   });
 
-  pythonProcess.stdout.on('data', d => console.log('[python]', d.toString().trim()));
-  pythonProcess.stderr.on('data', d => console.error('[python err]', d.toString().trim()));
-  pythonProcess.on('exit', code => console.log('[python] exited with code', code));
+  pythonProcess.stdout.on('data', d => console.log('[py]', d.toString().trim()));
+  pythonProcess.stderr.on('data', d => console.error('[py err]', d.toString().trim()));
+  pythonProcess.on('exit', code => {
+    console.log('[python] exit code:', code);
+    if (code !== 0 && code !== null) {
+      dialog.showErrorBox('Erro no servidor', `O servidor Python encerrou inesperadamente (código ${code}).\nTente reinstalar com instalar.bat`);
+    }
+  });
 }
 
-// ── Wait until server is up ────────────────────────────────────────────────────
+// ── Wait for server ────────────────────────────────────────────────────────────
 function waitForServer(attempts = 0) {
-  if (attempts > 40) {
-    dialog.showErrorBox(
-      'Erro',
-      'O servidor Python não iniciou.\nVerifique se yt-dlp está instalado:\n  pip install yt-dlp'
-    );
+  if (attempts > 60) {
+    dialog.showErrorBox('Tempo esgotado', 'O servidor demorou demais para iniciar.\nTente fechar e abrir o app novamente.');
     return;
   }
   http.get(`http://localhost:${PORT}/api/status`, res => {
     if (res.statusCode === 200) {
-      console.log('[server] ready, loading UI');
+      console.log('[server] ready!');
       mainWindow.loadURL(`http://localhost:${PORT}`);
     } else {
       setTimeout(() => waitForServer(attempts + 1), 500);
@@ -122,12 +144,10 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'splash.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
-
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
-
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -139,11 +159,14 @@ ipcMain.handle('open-folder', async (_, folderPath) => {
   shell.openPath(target);
 });
 
-// ── App lifecycle ──────────────────────────────────────────────────────────────
+// ── Lifecycle ──────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-  startPython();
   createWindow();
-  setTimeout(() => waitForServer(), 2000);
+  // startPython pode demorar (instala yt-dlp), roda em background
+  setTimeout(() => {
+    startPython();
+    setTimeout(() => waitForServer(), 3000);
+  }, 100);
 });
 
 app.on('window-all-closed', () => {
