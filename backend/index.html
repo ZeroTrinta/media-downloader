@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Media Downloader</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #19191e;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --accent: #c8f542;
+    --accent-dim: #9bbc2f;
+    --text: #f0f0ef;
+    --muted: #8a8a96;
+    --red: #ff5f5f;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 16px;
+  }
+
+  .logo { font-size: 13px; font-family: var(--mono); color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 700; letter-spacing: -0.03em; color: var(--text); margin-bottom: 6px; }
+  .subtitle { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+
+  .platform-badges { display: flex; gap: 8px; margin-bottom: 40px; flex-wrap: wrap; justify-content: center; }
+  .platform-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 100px; padding: 5px 12px 5px 8px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    transition: all 0.2s;
+  }
+  .platform-badge.active-platform { border-color: var(--accent); color: var(--accent); background: rgba(200,245,66,0.07); }
+  .badge-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+  .badge-yt .badge-icon { background: #ff0000; }
+  .badge-ig .badge-icon { background: #c13584; }
+  .badge-x  .badge-icon { background: #111; border: 1px solid #333; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; width: 100%; max-width: 640px; margin-bottom: 16px; }
+
+  .status-bar { display: flex; gap: 16px; align-items: center; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+  .status-dot.ok  { background: var(--accent); box-shadow: 0 0 8px var(--accent-dim); }
+  .status-dot.err { background: var(--red); }
+  .status-item { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .status-item .label { color: var(--text); }
+
+  label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+
+  .url-wrapper { position: relative; margin-bottom: 20px; }
+  .url-wrapper input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: var(--mono); font-size: 14px; padding: 14px 16px; outline: none; transition: border-color 0.2s; }
+  .url-wrapper input:focus { border-color: var(--accent); }
+  .detected-tag { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 100px; display: none; }
+  .detected-tag.show { display: block; }
+  .detected-tag.yt { background: rgba(255,0,0,0.15); color: #ff7070; }
+  .detected-tag.ig { background: rgba(193,53,132,0.15); color: #e060a0; }
+  .detected-tag.x  { background: rgba(150,150,150,0.12); color: #aaa; }
+
+  .platform-note { font-family: var(--mono); font-size: 11px; color: var(--muted); background: rgba(138,138,150,0.07); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 20px; display: none; line-height: 1.6; }
+  .platform-note.show { display: block; }
+
+  .preview-card { display: none; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; gap: 14px; align-items: center; }
+  .preview-card.show { display: flex; }
+  .preview-card img { width: 72px; height: 48px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+  .preview-info { flex: 1; min-width: 0; }
+  .preview-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+  .preview-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .mode-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--muted); font-family: var(--mono); font-size: 13px; padding: 12px; cursor: pointer; transition: all 0.2s; text-align: center; }
+  .mode-btn:hover  { border-color: var(--accent); color: var(--text); }
+  .mode-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,245,66,0.07); }
+  .mode-btn.disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--border); color: var(--muted); background: var(--surface2); }
+
+  .quality-row { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .qual-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 7px 14px; cursor: pointer; transition: all 0.2s; }
+  .qual-btn:hover  { border-color: var(--accent); color: var(--text); }
+  .qual-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,245,66,0.07); }
+
+  #quality-section { transition: opacity 0.2s; }
+  #quality-section.hidden { opacity: 0; pointer-events: none; height: 0; overflow: hidden; margin: 0; }
+
+  .dl-btn { width: 100%; background: var(--accent); border: none; border-radius: 10px; color: #0f0f11; font-family: var(--sans); font-size: 15px; font-weight: 600; padding: 15px; cursor: pointer; transition: all 0.2s; letter-spacing: 0.02em; }
+  .dl-btn:hover    { background: #d4f95a; transform: translateY(-1px); }
+  .dl-btn:active   { transform: translateY(0); }
+  .dl-btn:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; transform: none; }
+
+  .progress-card { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px 32px; width: 100%; max-width: 640px; margin-bottom: 16px; }
+  .progress-card.show { display: block; }
+  .prog-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .prog-label { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .prog-pct   { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--accent); }
+  .prog-bar-bg { background: var(--surface2); border-radius: 100px; height: 6px; overflow: hidden; margin-bottom: 16px; }
+  .prog-bar-fill { height: 100%; background: var(--accent); border-radius: 100px; width: 0%; transition: width 0.4s ease; }
+  .log-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-height: 120px; overflow-y: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .done-msg { display: none; background: rgba(200,245,66,0.08); border: 1px solid rgba(200,245,66,0.3); border-radius: 10px; padding: 16px; font-family: var(--mono); font-size: 13px; color: var(--accent); margin-top: 16px; text-align: center; }
+  .done-msg.show { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .open-folder-btn { background: var(--accent); border: none; border-radius: 8px; color: #0f0f11; font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 8px 18px; cursor: pointer; transition: background 0.2s; }
+  .open-folder-btn:hover { background: #d4f95a; }
+  .err-msg { display: none; background: rgba(255,95,95,0.08); border: 1px solid rgba(255,95,95,0.3); border-radius: 10px; padding: 16px; font-family: var(--mono); font-size: 12px; color: var(--red); margin-top: 16px; white-space: pre-wrap; word-break: break-word; }
+  .err-msg.show { display: block; }
+
+  .folder-path { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; margin-top: 32px; }
+  .folder-path strong { color: var(--text); }
+
+  .install-hint { background: rgba(255,95,95,0.06); border: 1px solid rgba(255,95,95,0.2); border-radius: 10px; padding: 14px 18px; font-family: var(--mono); font-size: 12px; color: var(--red); margin-bottom: 16px; display: none; line-height: 1.7; max-width: 640px; width: 100%; }
+  .install-hint.show { display: block; }
+  .install-hint code { background: rgba(255,95,95,0.15); padding: 2px 6px; border-radius: 4px; }
+
+  .cookies-row { display: flex; gap: 8px; align-items: center; margin-bottom: 24px; flex-wrap: wrap; }
+  .cookies-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .browser-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 7px 12px; cursor: pointer; transition: all 0.2s; }
+  .browser-btn:hover  { border-color: var(--accent); color: var(--text); }
+  .browser-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,245,66,0.07); }
+
+  .update-btn { background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 5px 10px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .update-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .update-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .update-toast { display: none; font-family: var(--mono); font-size: 11px; color: var(--accent); margin-top: 6px; }
+  .update-toast.show { display: block; }
+  .update-toast.err { color: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="logo">&#9654; local downloader</div>
+<h1>Media Downloader</h1>
+<p class="subtitle">royalty-free &amp; creative commons · uso local</p>
+
+<div class="platform-badges">
+  <div class="platform-badge badge-yt" id="badge-yt"><div class="badge-icon">▶</div>YouTube</div>
+  <div class="platform-badge badge-ig" id="badge-ig"><div class="badge-icon">◈</div>Instagram</div>
+  <div class="platform-badge badge-x"  id="badge-x" ><div class="badge-icon">𝕏</div>X / Twitter</div>
+</div>
+
+<div class="install-hint" id="install-hint"></div>
+
+<div class="card">
+  <div class="status-bar">
+    <div class="status-item"><div class="status-dot" id="dot-ytdlp"></div><span class="label">yt-dlp</span><span id="ytdlp-ver" style="font-size:10px;color:var(--muted);margin-left:2px"></span></div>
+    <div class="status-item"><div class="status-dot" id="dot-ffmpeg"></div><span class="label">ffmpeg</span></div>
+    <div class="status-item" style="margin-left:auto;gap:8px">
+      <button class="update-btn" id="update-btn" onclick="startUpdate()">↑ atualizar yt-dlp</button>
+      <span id="status-text" style="font-size:11px;letter-spacing:0.05em">verificando...</span>
+    </div>
+  </div>
+  <div class="update-toast" id="update-toast"></div>
+
+  <label>URL do conteúdo</label>
+  <div class="url-wrapper">
+    <input type="url" id="url-input" placeholder="YouTube, Instagram ou X (Twitter)..." oninput="onUrlChange()" />
+    <span class="detected-tag" id="detected-tag"></span>
+  </div>
+
+  <div class="platform-note" id="platform-note"></div>
+
+  <div class="preview-card" id="preview-card">
+    <img id="preview-thumb" src="" alt="" onerror="this.style.display='none'" />
+    <div class="preview-info">
+      <div class="preview-title" id="preview-title"></div>
+      <div class="preview-meta" id="preview-meta"></div>
+    </div>
+  </div>
+
+  <label>Formato</label>
+  <div class="mode-row">
+    <div class="mode-btn active" id="btn-video" onclick="setMode('video')">&#9654; Vídeo (MP4)</div>
+    <div class="mode-btn" id="btn-audio" onclick="setMode('audio')">&#9834; Somente áudio (MP3)</div>
+  </div>
+
+  <div id="quality-section">
+    <label>Qualidade</label>
+    <div class="quality-row">
+      <div class="qual-btn active" id="q-best" onclick="setQuality('best')">Melhor disponível</div>
+      <div class="qual-btn" id="q-720" onclick="setQuality('720')">720p</div>
+      <div class="qual-btn" id="q-480" onclick="setQuality('480')">480p</div>
+    </div>
+  </div>
+
+  <label>Cookies do navegador <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(necessário para vídeos com restrição de idade)</span></label>
+  <div class="cookies-row">
+    <div class="browser-btn active" id="br-none"    onclick="setBrowser('none')">Sem cookies</div>
+    <div class="browser-btn"        id="br-chrome"  onclick="setBrowser('chrome')">Chrome</div>
+    <div class="browser-btn"        id="br-firefox" onclick="setBrowser('firefox')">Firefox</div>
+    <div class="browser-btn"        id="br-safari"  onclick="setBrowser('safari')">Safari</div>
+    <div class="browser-btn"        id="br-brave"   onclick="setBrowser('brave')">Brave</div>
+    <div class="browser-btn"        id="br-edge"    onclick="setBrowser('edge')">Edge</div>
+    <div class="browser-btn"        id="br-opera"   onclick="setBrowser('opera')">Opera</div>
+  </div>
+
+  <button class="dl-btn" id="dl-btn" onclick="startDownload()">Baixar</button>
+</div>
+
+<div class="progress-card" id="progress-card">
+  <div class="prog-header">
+    <span class="prog-label" id="prog-label">baixando...</span>
+    <span class="prog-pct" id="prog-pct">0%</span>
+  </div>
+  <div class="prog-bar-bg"><div class="prog-bar-fill" id="prog-fill"></div></div>
+  <div class="log-box" id="log-box"></div>
+  <div class="done-msg" id="done-msg">
+    <span>&#10003; Download concluído!</span>
+    <button class="open-folder-btn" onclick="openFolder()">&#128193; Abrir pasta</button>
+  </div>
+  <div class="err-msg" id="err-msg"></div>
+</div>
+
+<div class="folder-path" id="folder-path"></div>
+
+<script>
+let mode = 'video', quality = 'best', browser = 'none', pollInterval = null, infoTimeout = null, currentPlatform = null;
+
+const BROWSERS = ['none','chrome','firefox','safari','brave','edge','opera'];
+
+const PLATFORMS = {
+  yt: { patterns: [/youtube\.com/, /youtu\.be/], label: 'YouTube', cls: 'yt', note: null, audioOk: true },
+  ig: { patterns: [/instagram\.com/], label: 'Instagram', cls: 'ig', note: 'Instagram: vídeos públicos funcionam bem. Conteúdo privado exige cookies configurados no yt-dlp.', audioOk: false },
+  x:  { patterns: [/twitter\.com/, /x\.com/], label: 'X / Twitter', cls: 'x', note: 'X/Twitter: apenas tweets com vídeo nativo podem ser baixados. Qualidade limitada ao disponível no post.', audioOk: false },
+};
+
+function detectPlatform(url) {
+  for (const [k, p] of Object.entries(PLATFORMS)) {
+    if (p.patterns.some(r => r.test(url))) return k;
+  }
+  return null;
+}
+
+async function checkStatus() {
+  try {
+    const d = await fetch('/api/status').then(r => r.json());
+    document.getElementById('dot-ytdlp').className = 'status-dot ' + (d.yt_dlp ? 'ok' : 'err');
+    document.getElementById('dot-ffmpeg').className = 'status-dot ' + (d.ffmpeg ? 'ok' : 'err');
+    document.getElementById('status-text').textContent = (d.yt_dlp && d.ffmpeg) ? 'pronto' : 'dependências faltando';
+    if (d.yt_dlp_version) document.getElementById('ytdlp-ver').textContent = 'v' + d.yt_dlp_version;
+    if (d.download_dir) document.getElementById('folder-path').innerHTML = 'Downloads em: <strong>' + d.download_dir + '</strong>';
+    const hint = document.getElementById('install-hint');
+    if (!d.yt_dlp || !d.ffmpeg) {
+      let msg = 'Instale as dependências faltando:<br>';
+      if (!d.yt_dlp) msg += '&nbsp;&nbsp;<code>pip install yt-dlp</code><br>';
+      if (!d.ffmpeg) msg += '&nbsp;&nbsp;macOS: <code>brew install ffmpeg</code><br>&nbsp;&nbsp;Linux: <code>sudo apt install ffmpeg</code>';
+      hint.innerHTML = msg; hint.classList.add('show');
+    } else { hint.classList.remove('show'); }
+  } catch(e) {}
+}
+
+let updatePoll = null;
+async function startUpdate() {
+  const btn = document.getElementById('update-btn');
+  const toast = document.getElementById('update-toast');
+  btn.disabled = true;
+  toast.textContent = 'Atualizando yt-dlp...';
+  toast.className = 'update-toast show';
+  await fetch('/api/update', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+  clearInterval(updatePoll);
+  updatePoll = setInterval(async () => {
+    const s = await fetch('/api/update-status').then(r => r.json());
+    if (s.done) {
+      clearInterval(updatePoll);
+      toast.textContent = '✓ yt-dlp atualizado! Reinicie o servidor para aplicar.';
+      btn.disabled = false;
+      checkStatus();
+    } else if (s.error) {
+      clearInterval(updatePoll);
+      toast.textContent = 'Erro: ' + s.error;
+      toast.className = 'update-toast show err';
+      btn.disabled = false;
+    }
+  }, 1000);
+}
+
+function setBrowser(b) {
+  browser = b;
+  BROWSERS.forEach(v => {
+    const el = document.getElementById('br-' + v);
+    if (el) el.className = 'browser-btn' + (v === b ? ' active' : '');
+  });
+}
+
+function updatePlatformUI(key) {
+  currentPlatform = key;
+  Object.keys(PLATFORMS).forEach(k => document.getElementById('badge-' + k).classList.toggle('active-platform', k === key));
+  const tag = document.getElementById('detected-tag');
+  const note = document.getElementById('platform-note');
+  const audioBtn = document.getElementById('btn-audio');
+  if (key) {
+    const p = PLATFORMS[key];
+    tag.textContent = p.label; tag.className = 'detected-tag show ' + p.cls;
+    if (p.note) { note.textContent = p.note; note.classList.add('show'); } else { note.classList.remove('show'); }
+    if (!p.audioOk) {
+      audioBtn.classList.add('disabled'); audioBtn.onclick = null;
+      if (mode === 'audio') setMode('video');
+    } else {
+      audioBtn.classList.remove('disabled'); audioBtn.onclick = () => setMode('audio');
+    }
+  } else {
+    tag.classList.remove('show'); note.classList.remove('show');
+    audioBtn.classList.remove('disabled'); audioBtn.onclick = () => setMode('audio');
+  }
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-video').className = 'mode-btn' + (m === 'video' ? ' active' : '');
+  const audioDisabled = currentPlatform && !PLATFORMS[currentPlatform]?.audioOk;
+  document.getElementById('btn-audio').className = 'mode-btn' + (m === 'audio' ? ' active' : '') + (audioDisabled ? ' disabled' : '');
+  document.getElementById('quality-section').className = m === 'audio' ? 'hidden' : '';
+}
+
+function setQuality(q) {
+  quality = q;
+  ['best','720','480'].forEach(v => document.getElementById('q-' + v).className = 'qual-btn' + (q === v ? ' active' : ''));
+}
+
+let lastUrl = '';
+function onUrlChange() {
+  const url = document.getElementById('url-input').value.trim();
+  if (url === lastUrl) return; lastUrl = url;
+  clearTimeout(infoTimeout);
+  document.getElementById('preview-card').classList.remove('show');
+  updatePlatformUI(detectPlatform(url));
+  if (url) infoTimeout = setTimeout(() => fetchInfo(url), 900);
+}
+
+async function fetchInfo(url) {
+  try {
+    const d = await fetch('/api/info?url=' + encodeURIComponent(url) + '&browser=' + browser).then(r => r.json());
+    if (d.title) {
+      document.getElementById('preview-title').textContent = d.title;
+      document.getElementById('preview-meta').textContent = (d.uploader || '') + (d.duration ? ' · ' + d.duration : '');
+      const img = document.getElementById('preview-thumb');
+      if (d.thumbnail) { img.src = d.thumbnail; img.style.display = ''; } else { img.style.display = 'none'; }
+      document.getElementById('preview-card').classList.add('show');
+    }
+  } catch(e) {}
+}
+
+async function startDownload() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { alert('Cole uma URL primeiro.'); return; }
+  document.getElementById('dl-btn').disabled = true;
+  document.getElementById('progress-card').classList.add('show');
+  document.getElementById('done-msg').classList.remove('show');
+  document.getElementById('err-msg').classList.remove('show');
+  document.getElementById('prog-fill').style.width = '0%';
+  document.getElementById('prog-pct').textContent = '0%';
+  document.getElementById('log-box').textContent = '';
+  document.getElementById('prog-label').textContent = mode === 'audio' ? 'extraindo áudio...' : 'baixando vídeo...';
+  try {
+    const d = await fetch('/api/download', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url, mode, quality, browser}) }).then(r => r.json());
+    if (d.id) pollProgress(d.id); else showError(d.error || 'Erro ao iniciar.');
+  } catch(e) { showError('Não foi possível conectar ao servidor.'); document.getElementById('dl-btn').disabled = false; }
+}
+
+function pollProgress(id) {
+  clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    try {
+      const d = await fetch('/api/progress?id=' + id).then(r => r.json());
+      const pct = d.progress || 0;
+      document.getElementById('prog-fill').style.width = pct + '%';
+      document.getElementById('prog-pct').textContent = pct + '%';
+      if (d.log?.length) { const b = document.getElementById('log-box'); b.textContent = d.log.slice(-10).join('\n'); b.scrollTop = b.scrollHeight; }
+      if (d.status === 'done') { clearInterval(pollInterval); lastDownloadFolder = d.folder || null; document.getElementById('done-msg').classList.add('show'); document.getElementById('prog-label').textContent = 'concluído'; document.getElementById('dl-btn').disabled = false; }
+      else if (d.status === 'error') { clearInterval(pollInterval); showError((d.log||[]).slice(-3).join('\n') || 'Erro desconhecido'); document.getElementById('dl-btn').disabled = false; }
+    } catch(e) {}
+  }, 700);
+}
+
+function showError(msg) {
+  const el = document.getElementById('err-msg'); el.textContent = 'Erro: ' + msg; el.classList.add('show');
+  document.getElementById('prog-label').textContent = 'falhou';
+}
+
+let lastDownloadFolder = null;
+function openFolder() {
+  if (window.electronAPI) window.electronAPI.openFolder(lastDownloadFolder);
+}
+
+checkStatus();
+</script>
+</body>
+</html>

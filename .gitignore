@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Electron build output
+dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# ffmpeg (instalado localmente pelo instalar.bat)
+ffmpeg/
+
+# Arquivos temporários do instalador
+_instalador_tmp/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
