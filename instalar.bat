@@ -4,178 +4,121 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo.
-echo  ============================================
-echo    Media Downloader - Instalador
-echo  ============================================
+echo  Media Downloader - Instalador
+echo  ==============================
 echo.
 
-REM ── Verifica permissao de administrador ──────────────────────────────────────
 net session >nul 2>&1
 if errorlevel 1 (
-    echo  [!] Solicitando permissao de administrador...
+    echo Solicitando permissao de administrador...
     powershell -Command "Start-Process '%~f0' -Verb RunAs"
     exit /b
 )
 
-set "TMP_DIR=%~dp0_instalador_tmp"
-if not exist "%TMP_DIR%" mkdir "%TMP_DIR%"
+set "TMP=%~dp0_tmp"
+if not exist "%TMP%" mkdir "%TMP%"
 
-REM ═══════════════════════════════════════════════════════
-REM  1. NODE.JS
-REM ═══════════════════════════════════════════════════════
-echo  [1/4] Verificando Node.js...
-
-REM Adiciona caminhos comuns do Node ao PATH desta sessao
+REM --- Adiciona caminhos comuns ao PATH ---
 set "PATH=%PATH%;C:\Program Files\nodejs;%APPDATA%\npm"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python314"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python313"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python312"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311"
+set "PATH=%PATH%;C:\Python314;C:\Python313;C:\Python312;C:\Python311"
 
+echo [1/4] Verificando Node.js...
 node --version >nul 2>&1
 if not errorlevel 1 (
-    for /f "tokens=*" %%v in ('node --version') do echo  [OK] Node.js %%v ja instalado
-    goto :check_python
+    for /f "tokens=*" %%v in ('node --version') do echo [OK] Node.js %%v
+    goto python
 )
-
-echo  [>>] Baixando Node.js LTS...
-set "NODE_URL=https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi"
-set "NODE_MSI=%TMP_DIR%\node.msi"
-powershell -Command "& { $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%NODE_MSI%' }"
-if not exist "%NODE_MSI%" ( echo  [ERRO] Falha ao baixar Node.js. & goto :error )
-
-echo  [>>] Instalando Node.js...
-msiexec /i "%NODE_MSI%" /qn /norestart ADDLOCAL=ALL
-REM Aguarda instalacao terminar
-ping -n 5 127.0.0.1 >nul
-
-REM Atualiza PATH com o caminho padrao do Node recem instalado
+echo [..] Baixando Node.js...
+powershell -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi' -OutFile '%TMP%\node.msi'"
+if not exist "%TMP%\node.msi" ( echo [ERRO] Falha ao baixar Node.js & goto erro )
+echo [..] Instalando Node.js...
+msiexec /i "%TMP%\node.msi" /qn /norestart
+ping -n 6 127.0.0.1 >nul
 set "PATH=%PATH%;C:\Program Files\nodejs;%APPDATA%\npm"
-for /f "tokens=*" %%p in ('powershell -Command "[System.Environment]::GetEnvironmentVariable(\"PATH\",\"Machine\")"') do set "PATH=%%p;%PATH%"
+for /f "tokens=*" %%p in ('powershell -Command "[Environment]::GetEnvironmentVariable(\"PATH\",\"Machine\")"') do set "PATH=%%p;%PATH%"
+echo [OK] Node.js instalado
 
-node --version >nul 2>&1
-if errorlevel 1 (
-    echo  [AVISO] Node instalado mas requer reinicio. Continuando com caminho direto...
-    set "NPM_CMD=C:\Program Files\nodejs\npm.cmd"
-) else (
-    set "NPM_CMD=npm"
-)
-echo  [OK] Node.js instalado
-
-REM ═══════════════════════════════════════════════════════
-REM  2. PYTHON
-REM ═══════════════════════════════════════════════════════
-:check_python
+:python
 echo.
-echo  [2/4] Verificando Python...
-
-REM Adiciona caminhos comuns do Python ao PATH desta sessao
-set "PATH=%PATH%;C:\Python311;C:\Python312;C:\Python313;C:\Python314"
-set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311"
-set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python312"
-set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python313"
-set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python314"
-
+echo [2/4] Verificando Python...
 python --version >nul 2>&1
 if not errorlevel 1 (
-    for /f "tokens=*" %%v in ('python --version') do echo  [OK] %%v ja instalado
-    goto :check_ffmpeg
+    for /f "tokens=*" %%v in ('python --version') do echo [OK] %%v
+    goto ffmpeg
 )
+echo [..] Baixando Python...
+powershell -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe' -OutFile '%TMP%\python.exe'"
+if not exist "%TMP%\python.exe" ( echo [ERRO] Falha ao baixar Python & goto erro )
+echo [..] Instalando Python...
+"%TMP%\python.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+ping -n 4 127.0.0.1 >nul
+for /f "tokens=*" %%p in ('powershell -Command "[Environment]::GetEnvironmentVariable(\"PATH\",\"Machine\")"') do set "PATH=%%p;%PATH%"
+echo [OK] Python instalado
 
-echo  [>>] Baixando Python 3.11...
-set "PY_URL=https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe"
-set "PY_EXE=%TMP_DIR%\python.exe"
-powershell -Command "& { $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_EXE%' }"
-if not exist "%PY_EXE%" ( echo  [ERRO] Falha ao baixar Python. & goto :error )
-
-echo  [>>] Instalando Python...
-"%PY_EXE%" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-ping -n 3 127.0.0.1 >nul
-
-REM Atualiza PATH
-set "PATH=%PATH%;C:\Python311;%LOCALAPPDATA%\Programs\Python\Python311"
-for /f "tokens=*" %%p in ('powershell -Command "[System.Environment]::GetEnvironmentVariable(\"PATH\",\"Machine\")"') do set "PATH=%%p;%PATH%"
-echo  [OK] Python instalado
-
-REM ═══════════════════════════════════════════════════════
-REM  3. FFMPEG
-REM ═══════════════════════════════════════════════════════
-:check_ffmpeg
+:ffmpeg
 echo.
-echo  [3/4] Verificando ffmpeg...
+echo [3/4] Verificando ffmpeg...
 ffmpeg -version >nul 2>&1
 if not errorlevel 1 (
-    echo  [OK] ffmpeg ja instalado
-    goto :install_deps
+    echo [OK] ffmpeg ja instalado
+    goto deps
 )
-
-echo  [>>] Baixando ffmpeg...
-set "FF_URL=https://github.com/BtbN/ffmpeg-builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-set "FF_ZIP=%TMP_DIR%\ffmpeg.zip"
-set "FF_DIR=%~dp0ffmpeg"
-powershell -Command "& { $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '%FF_URL%' -OutFile '%FF_ZIP%' }"
-if not exist "%FF_ZIP%" (
-    echo  [AVISO] Falha ao baixar ffmpeg. Downloads funcionarao sem alta qualidade.
-    goto :install_deps
+echo [..] Baixando ffmpeg...
+powershell -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://github.com/BtbN/ffmpeg-builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip' -OutFile '%TMP%\ffmpeg.zip'"
+if not exist "%TMP%\ffmpeg.zip" (
+    echo [AVISO] ffmpeg nao baixado. Qualidade pode ser limitada.
+    goto deps
 )
-echo  [>>] Extraindo ffmpeg...
-powershell -Command "Expand-Archive -Path '%FF_ZIP%' -DestinationPath '%TMP_DIR%\ffmpeg_ex' -Force"
-if not exist "%FF_DIR%" mkdir "%FF_DIR%"
-for /d %%d in ("%TMP_DIR%\ffmpeg_ex\*") do xcopy /e /y /q "%%d\bin\*" "%FF_DIR%\" >nul 2>&1
-powershell -Command "$p=[System.Environment]::GetEnvironmentVariable('PATH','Machine'); if($p -notlike '*ffmpeg*'){[System.Environment]::SetEnvironmentVariable('PATH',$p+';%FF_DIR%','Machine')}"
-set "PATH=%FF_DIR%;%PATH%"
-echo  [OK] ffmpeg instalado
+echo [..] Extraindo ffmpeg...
+powershell -Command "Expand-Archive -Path '%TMP%\ffmpeg.zip' -DestinationPath '%TMP%\ffx' -Force"
+if not exist "%~dp0ffmpeg" mkdir "%~dp0ffmpeg"
+for /d %%d in ("%TMP%\ffx\*") do xcopy /e /y /q "%%d\bin\*" "%~dp0ffmpeg\" >nul 2>&1
+powershell -Command "$p=[Environment]::GetEnvironmentVariable('PATH','Machine'); if($p -notlike '*ffmpeg*'){[Environment]::SetEnvironmentVariable('PATH',$p+';%~dp0ffmpeg','Machine')}"
+set "PATH=%~dp0ffmpeg;%PATH%"
+echo [OK] ffmpeg instalado
 
-REM ═══════════════════════════════════════════════════════
-REM  4. YT-DLP + ELECTRON
-REM ═══════════════════════════════════════════════════════
-:install_deps
+:deps
 echo.
-echo  [4/4] Instalando dependencias do app...
-
-echo  [>>] Instalando yt-dlp...
+echo [4/4] Instalando dependencias do app...
+echo [..] Instalando yt-dlp...
 pip install yt-dlp --quiet --disable-pip-version-check 2>nul
 if errorlevel 1 python -m pip install yt-dlp --quiet
-echo  [OK] yt-dlp instalado
+echo [OK] yt-dlp instalado
 
-echo  [>>] Instalando Electron (pode demorar alguns minutos)...
-REM Tenta npm normal, depois caminho direto
-if defined NPM_CMD (
-    call "%NPM_CMD%" install --loglevel=error
-) else (
-    call npm install --loglevel=error
-)
-if errorlevel 1 (
-    REM Ultima tentativa com caminho completo
-    call "C:\Program Files\nodejs\npm.cmd" install --loglevel=error
-    if errorlevel 1 ( echo  [ERRO] Falha ao instalar pacotes npm. & goto :error )
-)
-echo  [OK] Electron instalado
+echo [..] Instalando Electron...
+call npm install --loglevel=error 2>nul
+if errorlevel 1 call "C:\Program Files\nodejs\npm.cmd" install --loglevel=error
+if errorlevel 1 ( echo [ERRO] Falha no npm install & goto erro )
+echo [OK] Electron instalado
 
-REM ── Atalho com icone na Area de Trabalho ────────────────────────────────────
-echo.
-echo  [>>] Criando atalho na Area de Trabalho...
-set "SHORTCUT=%USERPROFILE%\Desktop\Media Downloader.lnk"
-set "TARGET=%~dp0iniciar.bat"
+echo [..] Criando atalho na Area de Trabalho...
 set "ICON=%~dp0src\icon.ico"
-powershell -Command "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut('%SHORTCUT%'); $s.TargetPath='%TARGET%'; $s.WorkingDirectory='%~dp0'; $s.IconLocation='%ICON%'; $s.Description='Media Downloader'; $s.Save()"
-echo  [OK] Atalho criado na Area de Trabalho
+set "TARGET=%~dp0iniciar.bat"
+powershell -Command "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Media Downloader.lnk'); $s.TargetPath='%TARGET%'; $s.WorkingDirectory='%~dp0'; $s.IconLocation='%ICON%'; $s.Save()"
+echo [OK] Atalho criado
 
-REM ── Limpeza ─────────────────────────────────────────────────────────────────
-rd /s /q "%TMP_DIR%" >nul 2>&1
+rd /s /q "%TMP%" >nul 2>&1
 
 echo.
-echo  ============================================
-echo    Instalacao concluida com sucesso!
-echo    Use o atalho na Area de Trabalho
-echo    ou clique duas vezes em iniciar.bat
-echo  ============================================
+echo  ==============================
+echo  Instalacao concluida!
+echo  Use o atalho na Area de Trabalho
+echo  ou clique em iniciar.bat
+echo  ==============================
 echo.
 pause
 exit /b 0
 
-:error
+:erro
 echo.
-echo  ============================================
-echo    Instalacao com erros!
-echo    Verifique sua conexao e tente de novo.
-echo  ============================================
+echo  ==============================
+echo  Instalacao com erros!
+echo  Verifique sua internet e tente novamente.
+echo  ==============================
 echo.
 pause
 exit /b 1
